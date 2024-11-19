@@ -6,7 +6,7 @@ OBSApi::Application.configure do
   config.cache_classes = true
 
   # Use a different logger for distributed setups
-  # config.logger        = SyslogLogger.new
+  config.logger    = ActiveSupport::TaggedLogging.new(Logger.new(STDOUT))
   config.log_level = :info
 
   config.eager_load = true
