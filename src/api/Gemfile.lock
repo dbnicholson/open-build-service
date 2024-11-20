@@ -179,6 +179,7 @@ GEM
       coderay (~> 1.1.0)
       method_source (~> 0.8.1)
       slop (~> 3.4)
+    puma (3.12.6)
     pundit (1.0.1)
       activesupport (>= 3.0.0)
     rack (1.6.4)
@@ -371,6 +372,7 @@ DEPENDENCIES
   nokogiri (~> 1.6.7)
   poltergeist (>= 1.4)
   pry (>= 0.9.12)
+  puma (~> 3.0)
   pundit
   rails (~> 4.2.2)
   rails_tokeninput (>= 1.6.1.rc1)

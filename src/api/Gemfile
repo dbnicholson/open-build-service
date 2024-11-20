@@ -64,6 +64,8 @@ group :production do
   # placing a config/newrelic.yml
   # be aware about the non-OSS license
 #  gem 'newrelic_rpm'
+  # rack web server
+  gem "puma", "~> 3.0"
 end
 
 # Gems used only for testing the application and not required in production environments by default.
