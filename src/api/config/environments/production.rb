@@ -22,7 +22,7 @@ OBSApi::Application.configure do
    # Enable serving of images, stylesheets, and javascripts from an asset server
    # config.action_controller.asset_host                  = "http://assets.example.com"
 
-  config.cache_store = :dalli_store, '127.0.0.1:11211', {namespace: 'obs-api', compress: true, expires_in: 1.day }
+  config.cache_store = :dalli_store, CONFIG['memcached_host'] || '127.0.0.1:11211', {namespace: 'obs-api', compress: true, expires_in: 1.day }
 
   # Full error reports are disabled and caching is turned on
   config.consider_all_requests_local       = false
