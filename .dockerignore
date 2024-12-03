@@ -4,6 +4,7 @@
 *.vagrant
 .*.sw*
 .env
+.github/
 Dockerfile.backend
 Dockerfile.frontend
 docker-compose.yml
