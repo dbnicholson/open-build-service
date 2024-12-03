@@ -1,0 +1,322 @@
+name: obs
+services:
+  # Frontend
+  web:
+    build:
+      dockerfile: Dockerfile.frontend
+      args:
+        GITHUB_REPO: ${GITHUB_REPO:-endlessm/open-build-service}
+    image: ghcr.io/${IMAGE_OWNER:-endlessm}/obs-frontend:${IMAGE_TAG:-latest}
+    expose:
+      - '9292'
+    command:
+      - /run.sh
+      - web
+    environment:
+      DATABASE_NAME: ${DATABASE_NAME:-obsapi}
+      DATABASE_USER: ${DATABASE_USER:-obsapi}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-opensuse}
+      DATABASE_HOST: db
+      MEMCACHED_HOST: cache
+      PROXY_HOST: proxy
+      SEARCH_HOST: search
+      SECRET_KEY: ${SECRET_KEY:-badsecret}
+      SRCSERVER_HOST: srcserver
+    healthcheck:
+      test: curl -fsS -o/dev/null http://127.0.0.1:9292/about || exit 1
+      interval: 15s
+      start_period: 10s
+      # start_interval: 2s
+    depends_on:
+      db:
+        required: true
+        condition: service_healthy
+      cache:
+        required: true
+        condition: service_healthy
+      setup:
+        required: true
+        condition: service_completed_successfully
+      srcserver:
+        condition: service_started
+      repserver:
+        condition: service_started
+  search:
+    build:
+      dockerfile: Dockerfile.frontend
+      args:
+        GITHUB_REPO: ${GITHUB_REPO:-endlessm/open-build-service}
+    image: ghcr.io/${IMAGE_OWNER:-endlessm}/obs-frontend:${IMAGE_TAG:-latest}
+    expose:
+      - '9314'
+    command:
+      - /run.sh
+      - search
+    volumes:
+      - search:/obs/db/sphinx
+    environment:
+      DATABASE_NAME: ${DATABASE_NAME:-obsapi}
+      DATABASE_USER: ${DATABASE_USER:-obsapi}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-opensuse}
+      DATABASE_HOST: db
+      MEMCACHED_HOST: cache
+      PROXY_HOST: proxy
+      SEARCH_HOST: search
+      SECRET_KEY: ${SECRET_KEY:-badsecret}
+      SRCSERVER_HOST: srcserver
+    healthcheck:
+      test: rake -s ts:status | grep 'is currently running'
+    depends_on:
+      db:
+        required: true
+        condition: service_healthy
+      cache:
+        required: true
+        condition: service_healthy
+      setup:
+        required: true
+        condition: service_completed_successfully
+  api-scheduler:
+    build:
+      dockerfile: Dockerfile.frontend
+      args:
+        GITHUB_REPO: ${GITHUB_REPO:-endlessm/open-build-service}
+    image: ghcr.io/${IMAGE_OWNER:-endlessm}/obs-frontend:${IMAGE_TAG:-latest}
+    command:
+      - /run.sh
+      - scheduler
+    environment:
+      DATABASE_NAME: ${DATABASE_NAME:-obsapi}
+      DATABASE_USER: ${DATABASE_USER:-obsapi}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-opensuse}
+      DATABASE_HOST: db
+      MEMCACHED_HOST: cache
+      PROXY_HOST: proxy
+      SEARCH_HOST: search
+      SECRET_KEY: ${SECRET_KEY:-badsecret}
+      SRCSERVER_HOST: srcserver
+    depends_on:
+      db:
+        required: true
+        condition: service_healthy
+      cache:
+        required: true
+        condition: service_healthy
+      setup:
+        required: true
+        condition: service_completed_successfully
+      srcserver:
+        condition: service_started
+      repserver:
+        condition: service_started
+  api-worker:
+    build:
+      dockerfile: Dockerfile.frontend
+      args:
+        GITHUB_REPO: ${GITHUB_REPO:-endlessm/open-build-service}
+    image: ghcr.io/${IMAGE_OWNER:-endlessm}/obs-frontend:${IMAGE_TAG:-latest}
+    command:
+      - /run.sh
+      - worker
+    volumes:
+      - search:/obs/db/sphinx
+    environment:
+      DATABASE_NAME: ${DATABASE_NAME:-obsapi}
+      DATABASE_USER: ${DATABASE_USER:-obsapi}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-opensuse}
+      DATABASE_HOST: db
+      MEMCACHED_HOST: cache
+      PROXY_HOST: proxy
+      SEARCH_HOST: search
+      SECRET_KEY: ${SECRET_KEY:-badsecret}
+      SRCSERVER_HOST: srcserver
+    depends_on:
+      db:
+        required: true
+        condition: service_healthy
+      cache:
+        required: true
+        condition: service_healthy
+      setup:
+        required: true
+        condition: service_completed_successfully
+      srcserver:
+        condition: service_started
+      repserver:
+        condition: service_started
+    deploy:
+      replicas: 2
+  setup:
+    build:
+      dockerfile: Dockerfile.frontend
+      args:
+        GITHUB_REPO: ${GITHUB_REPO:-endlessm/open-build-service}
+    image: ghcr.io/${IMAGE_OWNER:-endlessm}/obs-frontend:${IMAGE_TAG:-latest}
+    command:
+      - /run.sh
+      - setup
+    volumes:
+      - search:/obs/db/sphinx
+    environment:
+      DATABASE_NAME: ${DATABASE_NAME:-obsapi}
+      DATABASE_USER: ${DATABASE_USER:-obsapi}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-opensuse}
+      DATABASE_HOST: db
+      MEMCACHED_HOST: cache
+      PROXY_HOST: proxy
+      SEARCH_HOST: search
+      SECRET_KEY: ${SECRET_KEY:-badsecret}
+      SRCSERVER_HOST: srcserver
+    depends_on:
+      db:
+        required: true
+        condition: service_healthy
+      cache:
+        required: true
+        condition: service_healthy
+  proxy:
+    build:
+      dockerfile: Dockerfile.frontend
+      target: proxy
+      args:
+        GITHUB_REPO: ${GITHUB_REPO:-endlessm/open-build-service}
+    image: ghcr.io/${IMAGE_OWNER:-endlessm}/obs-proxy:${IMAGE_TAG:-latest}
+    ports:
+      - '8080:80'
+    environment:
+      WEB_HOST: web
+    healthcheck:
+      test: curl -fsS -o/dev/null http://127.0.0.1/robots.txt || exit 1
+    depends_on:
+      web:
+        required: true
+        condition: service_started
+  db:
+    image: docker.io/mariadb:10.4
+    volumes:
+      - db:/var/lib/mysql
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-rootpw}
+      MARIADB_DATABASE: ${DATABASE_NAME:-obsapi}
+      MARIADB_USER: ${DATABASE_USER:-obsapi}
+      MARIADB_PASSWORD: ${DATABASE_PASSWORD:-opensuse}
+    healthcheck:
+      # https://mariadb.com/kb/en/using-healthcheck-sh/
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 15s
+      start_period: 10s
+      # start_interval: 2s
+  cache:
+    image: docker.io/memcached:${IMAGE_TAG:-latest}
+    healthcheck:
+      # https://github.com/docker-library/memcached/issues/91
+      test:
+        - "CMD"
+        - bash
+        - -c
+        - 'exec 3<>/dev/tcp/127.0.0.1/11211 && echo version >&3 && read -u 3 -t 1 -a version && [ "$${version[0]}" = "VERSION" ]'
+
+  # Backend
+  dispatcher:
+    build:
+      dockerfile: Dockerfile.backend
+      args:
+        GITHUB_REPO: ${GITHUB_REPO:-endlessm/open-build-service}
+    image: ghcr.io/${IMAGE_OWNER:-endlessm}/obs-backend:${IMAGE_TAG:-latest}
+    command:
+      - /usr/lib/obs/server/bs_dispatch
+    environment:
+      SRCSERVER_HOST: srcserver
+      REPSERVER_HOST: repserver
+    volumes:
+      - backend:/srv/obs
+  dodup:
+    build:
+      dockerfile: Dockerfile.backend
+      args:
+        GITHUB_REPO: ${GITHUB_REPO:-endlessm/open-build-service}
+    image: ghcr.io/${IMAGE_OWNER:-endlessm}/obs-backend:${IMAGE_TAG:-latest}
+    command:
+      - /usr/lib/obs/server/bs_dodup
+    environment:
+      SRCSERVER_HOST: srcserver
+      REPSERVER_HOST: repserver
+    volumes:
+      - backend:/srv/obs
+  publisher:
+    build:
+      dockerfile: Dockerfile.backend
+      args:
+        GITHUB_REPO: ${GITHUB_REPO:-endlessm/open-build-service}
+    image: ghcr.io/${IMAGE_OWNER:-endlessm}/obs-backend:${IMAGE_TAG:-latest}
+    command:
+      - /usr/lib/obs/server/bs_publish
+    environment:
+      SRCSERVER_HOST: srcserver
+      REPSERVER_HOST: repserver
+    volumes:
+      - backend:/srv/obs
+  repserver:
+    build:
+      dockerfile: Dockerfile.backend
+      args:
+        GITHUB_REPO: ${GITHUB_REPO:-endlessm/open-build-service}
+    image: ghcr.io/${IMAGE_OWNER:-endlessm}/obs-backend:${IMAGE_TAG:-latest}
+    expose:
+      - '5252'
+    command:
+      - /usr/lib/obs/server/bs_repserver
+    environment:
+      SRCSERVER_HOST: srcserver
+      REPSERVER_HOST: repserver
+    volumes:
+      - backend:/srv/obs
+  build-scheduler-x86_64:
+    build:
+      dockerfile: Dockerfile.backend
+      args:
+        GITHUB_REPO: ${GITHUB_REPO:-endlessm/open-build-service}
+    image: ghcr.io/${IMAGE_OWNER:-endlessm}/obs-backend:${IMAGE_TAG:-latest}
+    command:
+      - /usr/lib/obs/server/bs_sched
+      - x86_64
+    environment:
+      SRCSERVER_HOST: srcserver
+      REPSERVER_HOST: repserver
+    volumes:
+      - backend:/srv/obs
+    depends_on:
+      - srcserver
+  srcserver:
+    build:
+      dockerfile: Dockerfile.backend
+      args:
+        GITHUB_REPO: ${GITHUB_REPO:-endlessm/open-build-service}
+    image: ghcr.io/${IMAGE_OWNER:-endlessm}/obs-backend:${IMAGE_TAG:-latest}
+    expose:
+      - '5352'
+    command:
+      - /usr/lib/obs/server/bs_srcserver
+    environment:
+      SRCSERVER_HOST: srcserver
+      REPSERVER_HOST: repserver
+    volumes:
+      - backend:/srv/obs
+  warden:
+    build:
+      dockerfile: Dockerfile.backend
+      args:
+        GITHUB_REPO: ${GITHUB_REPO:-endlessm/open-build-service}
+    image: ghcr.io/${IMAGE_OWNER:-endlessm}/obs-backend:${IMAGE_TAG:-latest}
+    command:
+      - /usr/lib/obs/server/bs_warden
+    environment:
+      SRCSERVER_HOST: srcserver
+      REPSERVER_HOST: repserver
+    volumes:
+      - backend:/srv/obs
+
+volumes:
+  db:
+  backend:
+  search:

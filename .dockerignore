@@ -3,6 +3,8 @@
 *.tmp
 *.vagrant
 .*.sw*
+.env
 Dockerfile.backend
 Dockerfile.frontend
+docker-compose.yml
 src/api/test/
