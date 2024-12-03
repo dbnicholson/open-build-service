@@ -3,5 +3,6 @@
 *.tmp
 *.vagrant
 .*.sw*
+Dockerfile.backend
 Dockerfile.frontend
 src/api/test/

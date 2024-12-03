@@ -1,0 +1,59 @@
+FROM docker.io/debian:stretch
+
+COPY docker-files/stretch.list /etc/apt/sources.list
+
+# obs-server and obs-build Depends and selected Recommends.
+ARG PACKAGES="apt-utils \
+    adduser \
+    diffutils \
+    git \
+    libbssolv-perl \
+    libcompress-raw-zlib-perl \
+    libfile-sync-perl \
+    libjson-xs-perl \
+    libnet-ssleay-perl \
+    libsocket-msghdr-perl \
+    libxml-parser-perl \
+    libxml-simple-perl \
+    patch \
+    reprepro \
+    dpkg-dev \
+    gnupg2 \
+    perl \
+    rpm \
+    debootstrap \
+    sudo \
+    libarchive-tools \
+    libcrypt-ssleay-perl \
+    "
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ${PACKAGES} && \
+    apt-get clean && \
+    addgroup --system --gid 200 obsrun && \
+    adduser --system --uid 200 --gid 200 --home /usr/lib/obs \
+      --gecos "OBS backend" --shell /usr/sbin/nologin obsrun
+
+COPY Makefile.include /src/
+COPY src/backend /src/src/backend
+RUN make -C /src/src/backend install && \
+    rm -rf /src && \
+    git clone https://github.com/endlessm/obs-build.git /src && \
+    make -C /src install && \
+    rm -rf /src && \
+    rm -rf /usr/lib/obs/server/build && \
+    ln -sfT /usr/lib/obs-build /usr/lib/obs/server/build && \
+    chown -R obsrun:obsrun /srv/obs
+
+COPY docker-files/backend/BSConfig.pm.in /usr/lib/obs/server/
+COPY docker-files/backend/entrypoint.sh /
+
+ENV SRCSERVER_HOST=127.0.0.1 \
+    REPSERVER_HOST=127.0.0.1
+
+ENTRYPOINT ["/entrypoint.sh"]
+
+ARG GITHUB_REPO=endlessm/open-build-service
+LABEL org.opencontainers.image.source=https://github.com/${GITHUB_REPO}
+LABEL org.opencontainers.image.description="Endless open-build-service backend image"
+LABEL org.opencontainers.image.licenses=GPL-2.0-or-later
