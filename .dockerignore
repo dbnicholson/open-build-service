@@ -1,0 +1,7 @@
+*~
+*.bak
+*.tmp
+*.vagrant
+.*.sw*
+Dockerfile.frontend
+src/api/test/

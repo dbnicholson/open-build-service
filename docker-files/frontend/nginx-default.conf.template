@@ -1,0 +1,34 @@
+server {
+    listen 80 default_server;
+    server_name _;
+    root /public;
+
+    location / {
+        try_files $uri @obs;
+    }
+
+    error_page 402 /402.html;
+    error_page 403 /403.html;
+    error_page 404 /404.html;
+    error_page 408 /408.html;
+    error_page 500 /500.html;
+
+    location @obs {
+        proxy_pass ${WEB_SCHEME}://${WEB_HOST}:${API_PORT};
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # https://nginx.org/en/docs/http/ngx_http_core_module.html#internal
+    # https://madecurious.com/curiosities/using-nginxs-x-accel-with-remote-urls/
+    location ~ ^/backend-redirect/(.*?)/(.*?)/(.*) {
+        internal;
+        proxy_pass $1://$2/$3;
+        proxy_set_header Host $1;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

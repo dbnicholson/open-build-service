@@ -1,0 +1,98 @@
+FROM docker.io/ruby:2.3 AS base
+
+ENV RACK_ENV=production
+ENV RAILS_ENV=production
+
+COPY docker-files/stretch.list /etc/apt/sources.list
+
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && \
+    apt-get install -y apt-transport-https ca-certificates && \
+    apt-get clean
+
+# Hashicorp
+COPY docker-files/hashicorp.list /etc/apt/sources.list.d/
+COPY docker-files/hashicorp-apt.gpg /etc/apt/trusted.gpg.d/
+
+ARG PACKAGES="\
+    gettext-base \
+    libldap-dev \
+    libsasl2-dev \
+    mariadb-client \
+    sphinxsearch \
+    vault \
+    "
+RUN apt-get update && \
+    apt-get install -y ${PACKAGES} && \
+    apt-get clean && \
+    ln -s ruby /usr/local/bin/ruby.ruby2.3
+
+COPY src/api/ /obs
+WORKDIR /obs
+
+RUN cp config/database.yml.example config/database.yml && \
+    cp config/options.yml.example config/options.yml && \
+    cp config/thinking_sphinx.yml.example config/thinking_sphinx.yml && \
+    echo -n "badsecret" > config/secret.key && \
+    touch config/production.sphinx.conf && \
+    chmod 600 config/database.yml config/production.sphinx.conf config/secret.key && \
+    mkdir -p log && \
+    ln -s /dev/stdout log/backend_access.log && \
+    ln -s /dev/stdout log/production.searchd.log && \
+    ln -s /dev/stdout log/production.searchd.query.log && \
+    bundle config --local frozen true && \
+    bundle config --local without assets,development,test && \
+    bundle install --no-cache
+
+# Assets
+FROM base AS assets
+
+COPY docs /src/docs
+
+RUN apt-get update && \
+    apt-get install -y nodejs && \
+    apt-get clean && \
+    bundle install --no-cache --with assets && \
+    bundle exec rake assets:precompile RAILS_GROUPS=assets && \
+    mkdir -p /src/src && \
+    ln -sT /obs /src/src/api && \
+    make -C /src/docs/api
+
+# NGINX reverse proxy
+FROM docker.io/nginx:stable AS proxy
+
+COPY --from=assets /obs/public /public
+COPY docker-files/frontend/nginx-default.conf.template /etc/nginx/templates/default.conf.template
+
+ENV WEB_SCHEME=http \
+    WEB_HOST=127.0.0.1 \
+    WEB_PORT=9292
+
+# Final image
+FROM base
+
+COPY --from=assets /obs/public/assets /obs/public/assets
+COPY --from=assets /src/docs/api/html /obs/public/apidocs
+COPY docker-files/frontend/entrypoint.sh docker-files/frontend/run.sh /
+COPY docker-files/frontend/database.yml.in \
+    docker-files/frontend/options.yml.in \
+    docker-files/frontend/thinking_sphinx.yml.in \
+    /obs/config/
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["irb"]
+
+ENV DATABASE_NAME=obsapi \
+    DATABASE_USER=obsapi \
+    DATABASE_PASSWORD=opensuse \
+    DATABASE_HOST=127.0.0.1 \
+    MEMCACHED_HOST=127.0.0.1 \
+    PROXY_HOST=127.0.0.1 \
+    SEARCH_HOST=127.0.0.1 \
+    SECRET_KEY=badsecret \
+    SRCSERVER_HOST=127.0.0.1
+
+ARG GITHUB_REPO=endlessm/open-build-service
+LABEL org.opencontainers.image.source=https://github.com/${GITHUB_REPO}
+LABEL org.opencontainers.image.description="Endless open-build-service frontend image"
+LABEL org.opencontainers.image.licenses=GPL-2.0-or-later
