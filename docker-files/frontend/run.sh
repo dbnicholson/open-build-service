@@ -20,7 +20,9 @@ case "$1" in
     setup)
         # FIXME: Use db:prepare in Rails 5.
         # https://guides.rubyonrails.org/active_record_migrations.html#setting-up-the-database
-        rake db:setup
+        if ! rake db:migrate:status >/dev/null; then
+            rake db:setup
+        fi
         rake ts:index
         rake db:migrate
         ;;
